@@ -1,26 +1,34 @@
 #' Daily hydrological data
 #'
-#' Downloading daily hydrological data from the danepubliczne.imgw.pl collection
+#' Downloading daily hydrological data from the danepubliczne.imgw.pl collection.
 #'
 #' @param year vector of years (e.g., 1966:2000)
-#' @param coords add coordinates of the stations (logical value TRUE or FALSE)
-#' @param station name or ID of hydrological station(s).
-#' It accepts names (characters in CAPITAL LETTERS) or stations' IDs (numeric)
-#' @param col_names three types of column names possible:
-#' "short" - default, values with shorten names,
-#' "full" - full English description,
-#' "polish" - original names in the dataset
-#' @param allow_failure logical - whether to proceed or stop on failure. By default set to TRUE (i.e. don't stop on error). For debugging purposes change to FALSE
-#' @param ... other parameters that may be passed to the 'shortening' function that shortens column names
+#' @param coords logical; add coordinates of the stations
+#' @param station character (CAPS) or numeric ID of station(s)
+#' @param col_names "short" (default), "full", or "polish"
+#' @param allow_failure logical; proceed on failure (default TRUE)
+#' @param ... additional options; np. `save_dir` do zapisu plików na dysk oraz argumenty do skracania kolumn
 #' @importFrom XML readHTMLTable
-#' @importFrom utils download.file unzip read.csv
-#' @importFrom data.table fread
+#' @importFrom utils unzip
+#' @return data.frame with daily hydrological data
 #' @export
-#' @returns data.frame with historical hydrological data for the daily time interval
-#' @examples \donttest{
-#'   daily = hydro_imgw_daily(year = 2000)
-#' }
-#'
+hydro_imgw_daily <- function(year,
+                             coords = FALSE,
+                             station = NULL,
+                             col_names = "short",
+                             allow_failure = TRUE,
+                             ...) {
+  if (allow_failure) {
+    tryCatch(
+      hydro_imgw_daily_bp(year, coords, station, col_names, ...),
+      error = function(e) {
+        message("Problems with downloading data. Run with allow_failure = FALSE to see more details")
+      }
+    )
+  } else {
+    hydro_imgw_daily_bp(year, coords, station, col_names, ...)
+  }
+}
 
 #' @keywords internal
 #' @noRd
