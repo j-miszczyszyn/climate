@@ -60,63 +60,69 @@ hydro_imgw_monthly_bp = function(year,
   base_url = "https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_hydrologiczne/"
   interval = "monthly"
   interval_pl = "miesieczne"
-
+  
   temp = tempfile()
   test_url(link = paste0(base_url, interval_pl, "/"), output = temp)
   a = readLines(temp, warn = FALSE)
-
+  
   ind = grep(readHTMLTable(a)[[1]]$Name, pattern = "/")
   catalogs = as.character(readHTMLTable(a)[[1]]$Name[ind])
   catalogs = gsub(x = catalogs, pattern = "/", replacement = "")
-  catalogs = catalogs[catalogs  %in% as.character(year)]
+  catalogs = catalogs  %in% as.character(year)
+  catalogs = as.character(readHTMLTable(a)[[1]]$Name[ind])[catalogs]
+  catalogs = gsub(x = catalogs, pattern = "/", replacement = "")
   if (length(catalogs) == 0) {
     stop("Selected year(s) is not available in the database.", call. = FALSE)
   }
   meta = hydro_metadata_imgw(interval)
-
+  
   all_data = vector("list", length = length(catalogs))
   
   for (i in seq_along(catalogs)) {
     catalog = catalogs[i]
-    adres = paste0(base_url, interval_pl, "/", catalog, "/mies_", catalog, ".zip")
-
+    
+    # --- ZMIANA: ZIP→CSV fallback ---
+    adres_zip = paste0(base_url, interval_pl, "/", catalog, "/mies_", catalog, ".zip")
+    adres_csv = paste0(base_url, interval_pl, "/", catalog, "/mies_", catalog, ".csv")
+    
     temp = tempfile()
     temp2 = tempfile()
-    test_url(adres, temp)
-    unzip(zipfile = temp, exdir = temp2)
-    file1 = paste(temp2, dir(temp2), sep = "/")[1]
+    
+    zip_ok <- !inherits(try(test_url(adres_zip, temp), silent = TRUE), "try-error")
+    if (zip_ok) {
+      unzip(zipfile = temp, exdir = temp2)
+      file1 = paste(temp2, dir(temp2), sep = "/")[1]
+    } else {
+      test_url(adres_csv, temp)
+      file1 = temp
+    }
+    # --- KONIEC ZMIANY ---
+    
     data1 = imgw_read(translit, file1)
     colnames(data1) = meta[[1]][, 1]
     all_data[[i]] = data1
   }
   all_data = do.call(rbind, all_data)
-
+  
   all_data[all_data == 9999] = NA
   all_data[all_data == 99999.999] = NA
   all_data[all_data == 99.9] = NA
   colnames(all_data) = meta[[1]][, 1]
-  # coords
   if (coords) {
     all_data = merge(climate::imgw_hydro_stations, all_data, by.x = "id", by.y = "Kod stacji", all.y = TRUE)
   }
-  #station selection
   if (!is.null(station)) {
     if (is.character(station)) {
       all_data = all_data[substr(all_data$`Nazwa stacji`, 1, nchar(station)) == station, ]
-      if (nrow(all_data) == 0) {
-        stop("Selected station(s) is not available in the database.", call. = FALSE)
-      }
+      if (nrow(all_data) == 0) stop("Selected station(s) is not available in the database.", call. = FALSE)
     } else if (is.numeric(station)) {
       all_data = all_data[all_data$`Kod stacji` %in% station, ]
-      if (nrow(all_data) == 0) {
-        stop("Selected station(s) is not available in the database.", call. = FALSE)
-      }
+      if (nrow(all_data) == 0) stop("Selected station(s) is not available in the database.", call. = FALSE)
     } else {
       stop("Selected station(s) are not in the proper format.", call. = FALSE)
     }
   }
   all_data = all_data[do.call(order, all_data[grep(x = colnames(all_data), "Nazwa stacji|Rok hydrologiczny|w roku hydro")]), ]
-  # fix dates and add as seperate column:
   yy_ind = grep(x = colnames(all_data), "Rok hydrologiczny")
   mm_ind = grep(x = colnames(all_data), "kalendarzowy")
   data_df = all_data[, c(yy_ind, mm_ind)]
@@ -124,8 +130,9 @@ hydro_imgw_monthly_bp = function(year,
   data_df$yy = ifelse(data_df[, 2] >= 11, data_df[, 1] - 1, data_df[, 1])
   all_data$Data = as.Date(ISOdate(year = data_df$yy, month = data_df[, 2], day = data_df$day))
   all_data = all_data[, c(1:3, ncol(all_data), 4:(ncol(all_data) - 1)), ]
-
+  
   all_data = hydro_shortening_imgw(all_data, col_names = col_names, ...)
-
+  
   return(all_data)
 }
+
